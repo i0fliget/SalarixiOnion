@@ -32,15 +32,19 @@
 # Gallery
 
 **Client settings page**
+
 ![](./images/settings-page-screen.png)
 
 **Client control page**
+
 ![](./images/control-page-screen.png)
 
 **Client graphic page**
+
 ![](./images/graphic-page-screen.png)
 
 **Client monitoring page**
+
 ![](./images/monitoring-page-screen.png)
 
 
@@ -64,4 +68,5 @@
 4. Go to the directory **./services**
 5. Run the file **so-utils.exe**
 6. Run the file **so-core.exe**
+
 7. Run the file **so-interface.exe**
