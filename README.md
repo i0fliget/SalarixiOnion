@@ -5,6 +5,8 @@
 
 # About the project
 
+[<img src="https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/telegram.svg" width="18" style="vertical-align:middle;margin-right:8px;margin-top:-5px;"> <span style="margin-top:5px;">**Telegram Official**</span>](https://t.me/salarixionion)
+
 ⭐ **Salarixi Onion** allows you to launch a specific number of bots on **Minecraft servers** and manage them in real time. The client is **very user-friendly** and **easy to use**, offering **great flexibility** and **functionality**.
 
 ✨ The client gives you **full control** over bots, from chat messages to various cheating functions.
@@ -29,6 +31,8 @@
 - 🌐 Real-time monitoring
 - 📅 Event logging
 - 💦 Good stability
+- 🧨 Cheat functions
+- 💻 Hack functions
 
 
 # Gallery
@@ -76,3 +80,4 @@
 # Licence 
 
 MIT License - [LICENSE](./LICENSE)
+
