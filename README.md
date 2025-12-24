@@ -1,4 +1,4 @@
-# ✨ SalarixiOnion - Minecraft Botting Tool
+# ✨ Salarixi Onion - Minecraft Botting Tool
 
 ## 🎯 About
 
@@ -64,42 +64,25 @@ The client has several large sections, they will be presented below in the table
 
 ![](./images/proxy.png)
 
-![](./images/control.png)
+![](./images/control-chat.png)
 
-![](./images/tab.jpg)
-
-![](./images/graphic.png)
+![](./images/control-flight.png)
 
 ![](./images/monitoring.png)
 
 ![](./images/monitoring-chat.png)
 
-![](./images/log.png)
-
-![](./images/about.png)
-
 ## 💾 Installation
 
-### Windows
 1. Install the latest release of the project from **GitHub**
 2. Unzip the downloaded archive
 3. Go to the unzipped folder
-4. Run the file **tools.exe** and wait until it starts completely
-5. Run the file **collector.exe** and wait until it starts completely
-6. Run the main file **salarixionion-YOUR_VERSION.exe**
-7. Ready
+4. Run the main file **salarixionion-YOUR_VERSION**
+5. Ready
 
-### Linux
-1. Install the latest release of the project from **GitHub**
-2. Unzip the downloaded archive
-3. Go to the unzipped folder
-4. Run the file **tools** and wait until it starts completely
-5. Run the file **collector** and wait until it starts completely
-6. Grant execute permission to the file **salarixionion-YOUR_VERSION.AppImage** and run it
-7. Ready
 
 ## 📜 Additional Information
 
-- **Latest Beta-Release:** [Beta-Release](https://github.com/nullclyze/SalarixiOnion/releases/tag/v1.0.2-beta)
+- **Latest Beta-Release:** [Beta-Release](https://github.com/nullclyze/SalarixiOnion/releases/tag/v1.0.3-beta)
 - **Latest Expert-Release:** [Expert-Release](https://github.com/nullclyze/SalarixiOnion/releases/tag/v1.0.2-expert)
 - **License:** [MIT License](./LICENSE)
