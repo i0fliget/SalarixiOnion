@@ -494,7 +494,7 @@
         </div>
 
         <div class="right">
-          <div class="btn-group-column" style="margin-top: 10px;">
+          <div class="btn-group-column" style="margin-top: 2px;">
             <button class="btn" id="load-proxy-file" style="width: 170px;">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-arrow-down" viewBox="0 0 16 16">
                 <path d="M8.5 6.5a.5.5 0 0 0-1 0v3.793L6.354 9.146a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 0 0-.708-.708L8.5 10.293z"/>
@@ -518,7 +518,8 @@
               <div class="custom-select between" style="margin-top: 6px;">
                 <label>Алгоритм: </label>
                 <select id="proxy-finder-algorithm">
-                  <option value="apic">APIc</option>
+                  <option value="upc">UPc</option>
+                  <option value="apic" selected>APIc</option>
                   <option value="dfpc" disabled>DFPc</option>
                   <option value="dppc" disabled>DPPc</option>
                 </select>
@@ -531,6 +532,8 @@
                   <option value="socks5">SOCKS5</option>
                   <option value="socks4">SOCKS4</option>
                   <option value="http">HTTP</option>
+                  <option value="ss">Shadowsocks</option>
+                  <option value="vless" disabled>Vless</option>
                 </select>
               </div>
 
@@ -564,6 +567,8 @@
                   <option value="800">800</option>
                   <option value="1500">1500</option>
                   <option value="3000">3000</option>
+                  <option value="20000">20000</option>
+                  <option value="50000">50000</option>
                   <option value="max" selected>Максимум</option>
                 </select>
               </div>
@@ -585,6 +590,7 @@
             <p class="proxy-counter">SOCKS5 прокси: <span id="socks5-proxy-count">0</span></p>
             <p class="proxy-counter">SOCKS4 прокси: <span id="socks4-proxy-count">0</span></p>
             <p class="proxy-counter">HTTP прокси: <span id="http-proxy-count">0</span></p>
+            <p class="proxy-counter">Shadowsocks прокси: <span id="shadowsocks-proxy-count">0</span></p>
 
             <p class="proxy-counter" style="margin-top: 10px;">Всего прокси: <span id="total-proxy-count">0</span></p>
           </div>
@@ -1395,6 +1401,11 @@
                 </div>
 
                 <div class="form-input">
+                  <label for="anti-fall-fall-velocity" class="text">Триггер (скорость падения)</label>
+                  <input type="number" control="anti-fall" id="anti-fall-fall-velocity" placeholder="-0.5" value="-0.5" name="fallVelocity">
+                </div>
+
+                <div class="form-input">
                   <label for="anti-fall-min-inertial-jerk" class="text">Рывок вверх (минимум)</label>
                   <input type="number" control="anti-fall" id="anti-fall-min-inertial-jerk" placeholder="0.0000001" value="0.0000001" name="minInertialJerk">
                 </div>
@@ -1503,11 +1514,13 @@
     <div class="form-container" id="graphic-container" style="display: none;" global="true">
       <h1 class="title">График</h1>
 
-      <div class="graphic-container">
+      <h1 class="info-text" id="graphic-status-text">Данные отсутствуют</h1>
+
+      <div class="graphic-container" id="graphic-active-bots-container" style="display: none;">
         <canvas id="graphic-active-bots" style="height: 230px; max-height: 230px;"></canvas>
       </div>
 
-      <div class="graphic-container">
+      <div class="graphic-container" id="graphic-average-load-container" style="display: none;">
         <canvas id="graphic-average-load" style="height: 230px; max-height: 230px;"></canvas>
       </div>
     </div>

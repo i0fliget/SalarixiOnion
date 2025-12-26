@@ -8,15 +8,25 @@ interface Options {
 };
 
 const apicServices = {
-  'proxyscrape': 'https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=json',
-  'proxifly': 'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json',
-  'jetkai-proxy-list': 'https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/json/proxies-advanced.json',
-  'monosans-proxy-list': 'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies_pretty.json',
-  'vakhov-proxy-list': 'https://raw.githubusercontent.com/vakhov/fresh-proxy-list/refs/heads/master/proxylist.json',
-  'geonode': [
+  'json:proxyscrape': 'https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=json',
+  'json:proxifly': 'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json',
+  'json:jetkai-proxy-list': 'https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/json/proxies-advanced.json',
+  'json:monosans-proxy-list': 'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies_pretty.json',
+  'json:vakhov-proxy-list': 'https://raw.githubusercontent.com/vakhov/fresh-proxy-list/refs/heads/master/proxylist.json',
+  'json:geonode': [
     'https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc',
     'https://proxylist.geonode.com/api/proxy-list?limit=500&page=2&sort_by=lastChecked&sort_type=desc',
     'https://proxylist.geonode.com/api/proxy-list?limit=500&page=3&sort_by=lastChecked&sort_type=desc',
+  ]
+};
+
+const upcServices = {
+  ...apicServices,
+  'text:gfpcom-proxy-list': [
+    'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/http.txt',
+    'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/socks4.txt',
+    'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/socks5.txt',
+    'https://raw.githubusercontent.com/wiki/gfpcom/free-proxy-list/lists/ss.txt'
   ]
 };
 
@@ -36,11 +46,11 @@ function randomUserAgent() {
   return String(userAgents[randomInt(0, userAgents.length)]);
 }
 
-async function request(name: string, url: string) {
+async function request(name: string, url: string, type: string) {
   try {
     const res = await fetch(url, { headers: { 'User-Agent': randomUserAgent() } });
     if (res.ok) {
-      const data = await res.json();
+      const data = type === 'json' ? await res.json() : await res.text();
       return { success: true, name, data };
     } else {
       return { success: false, name, error: `HTTP ${res.status}` };
@@ -55,25 +65,50 @@ function createTaskFlow(urls: any) {
 
   for (const [name, url] of Object.entries(urls)) {
     if (Array.isArray(url)) {
-      for (const u of url) tasks.push(request(name, u));
+      for (const u of url) tasks.push(request(String(name.split(':')[1]), u, String(name.split(':')[0])));
     } else {
-      tasks.push(request(name, url as string));
+      tasks.push(request(String(name.split(':')[1]), url as string, String(name.split(':')[0])));
     }
   }
 
   return tasks;
 }
 
+async function UPc(protocol: string) {
+  let proxies = [];
+
+  const apicList = await APIc(protocol, 'any');
+
+  if (apicList.length > 0) proxies.push(...apicList);
+
+  const tasks = createTaskFlow(upcServices);
+  const results = await Promise.all(tasks);
+
+  for (const r of results) {
+    if (!r.success) continue;
+    const data = String(r.data).trim().split('\n');
+    const name = r.name;
+
+    if (name === 'gfpcom-proxy-list') {
+      for (const proxy of data ?? []) {
+        if (protocol === 'any' || String(proxy.split('://')[0]).toLowerCase() === protocol) proxies.push(proxy);
+      }
+    }
+  } 
+
+  return proxies;
+}
+
 async function APIc(protocol: string, country: string) {
   const tasks = createTaskFlow(apicServices);
   const results = await Promise.all(tasks);
 
-  const proxies: string[] = [];
+  const proxies = [];
 
-  for (const result of results) {
-    if (!result.success) continue;
-    const data = result.data;
-    const name = result.name;
+  for (const r of results) {
+    if (!r.success) continue;
+    const data = r.data;
+    const name = r.name;
 
     if (name === 'proxyscrape') {
       for (const proxy of data.proxies ?? []) {
@@ -119,7 +154,7 @@ async function APIc(protocol: string, country: string) {
         }
       }
     } else if (name === 'geonode') {
-      for (const proxy of data?.data ?? []) {
+      for (const proxy of data.data ?? []) {
         if (country === 'any' || proxy.country === country.toUpperCase()) {
           const protocols = (proxy.protocols ?? []).map((p: string) => p.toLowerCase());
           if (protocol === 'any') {
@@ -137,10 +172,12 @@ async function APIc(protocol: string, country: string) {
 
 export async function collect(options: Options) {
   try {
-    let proxy_list: string[] = [];
+    let proxy_list: any[] = [];
 
     if (options.algorithm === 'apic') {
       proxy_list = await APIc(options.protocol, options.country);
+    } else if (options.algorithm === 'upc') {
+      proxy_list = await UPc(options.protocol);
     }
 
     if (options.count !== 'max') {

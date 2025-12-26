@@ -1497,7 +1497,7 @@ textarea::-webkit-resizer {
   height: auto;
   background: #13131333;
   border: 1px solid #343434d6;
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   overflow: hidden;  
   flex-direction: column;
@@ -1510,7 +1510,9 @@ textarea::-webkit-resizer {
   margin-top: 6px;
   margin-left: 10px;
   margin-right: 10px;
-  background-color: transparent;
+  background-color: #1b1a1a67;
+  border-color: #3f3e3ea8;
+  transition: none;
 }
 
 .bot-card-head {
@@ -1567,6 +1569,7 @@ textarea::-webkit-resizer {
   color: #9c9c9c;
   font-size: 15px;
   margin-bottom: 4px;
+  line-height: 1;
 }
 
 .info-text {

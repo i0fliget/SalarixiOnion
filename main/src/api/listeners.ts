@@ -4,13 +4,13 @@ import cors from 'cors';
 
 import { transmit } from './transfer.js';
 import { add, del, msg } from './session.js';
-import { startBots, stopBots, manipulateBot, flow } from '../bot/base.js'
+import { replenishProxyList, startBots, stopBots, manipulateBot, flow } from '../bot/base.js'
 import { pool } from '../common/pool.js';
 
 export const app = express();
 
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '50mb' }));
 app.use(cors());
 
 function clear(response: any) {
@@ -136,6 +136,7 @@ app.get('/salarixi/session/monitoring/profile-data', async (_, res) => add('moni
 app.get('/salarixi/session/monitoring/chat-history', async (_, res) => add('monitoring:chat-history', res));
 
 app.post('/salarixi/system/data/clear', (_, res) => clear(res));
+app.post('/salarixi/system/proxy-list/update', (req, res) => replenishProxyList(req.body.list, req.body.clean, res));
 
 app.post('/salarixi/botting/start', async (req, res) => await botting('start', req, res));
 app.post('/salarixi/botting/stop', async (_, res) => await botting('stop', null, res));

@@ -30,6 +30,7 @@ interface FlowItem {
 }
 
 let active = false;
+let proxyList: string[] = [];
 
 export let flow: Record<string, FlowItem> = {};
 
@@ -37,6 +38,12 @@ let settings: Map<string, any> = new Map();
 
 async function sleep(delay: number) {
 	await new Promise(resolve => setTimeout(resolve, delay));
+}
+
+export function replenishProxyList(list: string[], clean: boolean = false, res: any) {
+	if (clean) proxyList = [];
+	if (list.length > 0) proxyList.push(...list);
+	res.end();
 }
 
 export async function startBots(options: any) {
@@ -55,12 +62,6 @@ export async function startBots(options: any) {
 		}
 
 		fs.mkdirSync('./data');
-
-		let proxies: string[] = [];
-		
-		if (options.proxyList) {
-			proxies = String(options.proxyList).trim().split('\n');
-		}
 		
 		let count = 0;
 		
@@ -85,9 +86,9 @@ export async function startBots(options: any) {
 				const loginCommand = mutateText({ text: options.loginCommand, advanced: false, data: null });
 				const loginTemplate = mutateText({ text: options.loginTemplate, advanced: false, data: null });
 
-				if (count >= proxies.length) count = 0;
+				if (count >= proxyList.length) count = 0;
 
-				const proxy = proxies[count] || null;
+				const proxy = proxyList[count] || null;
 			
 				count++;
 
@@ -152,7 +153,6 @@ export async function stopBots() {
 		Object.keys(flow).forEach(k => {
 			resetBot(k);
 			flow[k]?.bot?.end('@salarixi:disconnect');
-			delete flow[k];
 			settings.delete(k);
 		});
 
@@ -167,6 +167,20 @@ export async function stopBots() {
 		});
 
 		del('process:botting');
+
+		msg('graphic:active-bots', { message: 'SSE-соединение закрыто' });
+		msg('graphic:average-load', { message: 'SSE-соединение закрыто' });
+		msg('monitoring:profile-data', { message: 'SSE-соединение закрыто' });
+		msg('monitoring:chat-history', { message: 'SSE-соединение закрыто' });
+
+		del('graphic:active-bots');
+    del('graphic:average-load');
+    del('monitoring:profile-data');
+    del('monitoring:chat-history');
+
+		if (typeof global.gc !== 'undefined') {
+			global.gc();
+		}
 
 		return { type: 'info', info: {
 			success: true,
@@ -356,7 +370,7 @@ async function createBot(username: string) {
 
 			profile.proxy = proxyHost;
 
-			let proxyType: 'socks5' | 'socks4' | 'http' | '@none';
+			let proxyType: 'socks5' | 'socks4' | 'http' | 'ss' | '@none';
 
 			if (options.proxy.startsWith('socks5://')) {
 				proxyType = 'socks5';
@@ -364,6 +378,8 @@ async function createBot(username: string) {
 				proxyType = 'socks4';
 			} else if (options.proxy.startsWith('http://')) {
 				proxyType = 'http';
+			} else if (options.proxy.startsWith('ss://')) {
+				proxyType = 'ss';
 			} else {
 				proxyType = '@none';
 			}

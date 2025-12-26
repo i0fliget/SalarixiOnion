@@ -15,8 +15,8 @@ app.commandLine.appendSwitch('no-sandbox');
 
 const client = {
   version: '1.0.3',
-  type: 'Beta',
-  releaseDate: '24.12.2025'
+  type: 'Expert',
+  releaseDate: '26.12.2025'
 };
 
 let win: BrowserWindow;

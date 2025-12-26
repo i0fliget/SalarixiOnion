@@ -5,7 +5,8 @@ let statistics = {
   latestConfig: {},
   usernameList: [],
   latestControlContainer: null,
-  listeners: new Map()
+  listeners: new Map(),
+  mainEventSource: null
 };
 
 let activity = {
@@ -115,6 +116,10 @@ async function clear() {
 
   listenerManager.cleanup();
 
+  if (typeof gc !== 'undefined') {
+    gc();
+  }
+
   await fetch(`${localhost}/system/data/clear`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
 }
 
@@ -122,6 +127,7 @@ function resetEventSource(e) {
   e.onmessage = null;
   e.onerror = null;
   e.close();
+  e = null;
 }
 
 async function startBots() {
@@ -132,6 +138,38 @@ async function startBots() {
   }
 
   try {
+    const proxyList = String(document.getElementById('proxy-list').value).toLowerCase().split('\n');
+
+    if (proxyList.length > 0) {
+      const maxChunkSize = 5000;
+
+      const send = async (list, clean) => {
+        await fetch(`${localhost}/system/proxy-list/update`, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            list: list,
+            clean: clean
+          })
+        });
+      }
+
+      if (proxyList.length < maxChunkSize) {
+        await send(proxyList, true);
+      } else {
+        let sentSize = 0;
+
+        for (let i = 0; i < proxyList.length / maxChunkSize; i++) {
+          await send(proxyList.slice(maxChunkSize * i, (maxChunkSize * i) + maxChunkSize), i === 0 ? true : false);
+          sentSize += maxChunkSize;
+        }
+
+        if (proxyList.length - sentSize > 0) {
+          await send(proxyList.slice(sentSize, proxyList.length), false);
+        }
+      }
+    }
+
     const address = document.getElementById('address').value;
     const version = document.getElementById('version').value;
     const quantity = parseInt(document.getElementById('quantity').value);
@@ -154,8 +192,6 @@ async function startBots() {
     const rejoinDelay = parseInt(document.getElementById('rejoin-delay').value);
     const dataUpdateFrequency = parseInt(document.getElementById('data-update-frequency').value);
     const chatHistoryLength = parseInt(document.getElementById('chat-history-length').value);
-
-    const proxyList = String(document.getElementById('proxy-list').value).toLowerCase();
 
     const useKeepAlive = document.getElementById('use-keep-alive').checked;
     const usePhysics = document.getElementById('use-physics').checked;
@@ -194,7 +230,6 @@ async function startBots() {
       loginMinDelay: loginMinDelay || 2000,
       loginMaxDelay: loginMaxDelay || 3000,
       dataUpdateFrequency: dataUpdateFrequency,
-      proxyList: proxyList,
       useKeepAlive: useKeepAlive,
       usePhysics: usePhysics,
       useProxy: useProxy,
@@ -216,6 +251,9 @@ async function startBots() {
 
     activity.botting = true;
 
+    graphicManager.enableGraphics();
+    monitoringManager.enableMonitoring();
+
     log('Включение мониторинга...', 'log-system');
 
     await monitoringManager.wait();
@@ -224,28 +262,28 @@ async function startBots() {
 
     log('Установка SSE-соединения...', 'log-system');
 
-    eventSource = new EventSource(`${localhost}/session/botting`);
+    statistics.mainEventSource = new EventSource(`${localhost}/session/botting`);
 
-    eventSource.onmessage = async (event) => {
+    statistics.mainEventSource.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
 
         log(data.message, `log-${data.type}`);
 
         if (data.message === 'SSE-соединение закрыто') {
-          resetEventSource(eventSource);
+          resetEventSource(statistics.mainEventSource);
           await clear();
         }
       } catch (error) {
         log(`Ошибка (start-bots-process): ${error}`, 'log-error');
-        resetEventSource(eventSource);
+        resetEventSource(statistics.mainEventSource);
         await clear();
       }
     }
 
-    eventSource.onerror = async () => {
+    statistics.mainEventSource.onerror = async () => {
       log('Ошибка (start-bots-process): SSE-connection was dropped', 'log-error');
-      resetEventSource(eventSource);
+      resetEventSource(statistics.mainEventSource);
       await clear();
     }
   } catch (error) {
@@ -265,9 +303,13 @@ async function stopBots() {
 
     log(operation.answer.data.message, `log-${operation.answer.type}`);
 
+    resetEventSource(statistics.mainEventSource);
+
+    graphicManager.disableGraphics();
+
     log('Выключение мониторинга...', 'log-system');
 
-    await monitoringManager.clear();
+    monitoringManager.disableMonitoring();
 
     log('Мониторинг выключен', 'log-system');
 
@@ -418,61 +460,113 @@ class FunctionManager {
 }
 
 class GraphicManager {
-  chartActiveBots = undefined;
-  chartAverageLoad = undefined;
+  statusText = null;
+
+  graphicActiveBots = null;
+  graphicAverageLoad = null;
+
+  chartActiveBots = null;
+  chartAverageLoad = null;
+
+  eventSources = {
+    activeBots: null,
+    averageLoad: null
+  };
 
   async init() {
-    await this.createGraphicActiveBots();
-    await this.createGraphicAverageLoad();
+    this.graphicActiveBots = document.getElementById('graphic-active-bots-container');
+    this.graphicAverageLoad = document.getElementById('graphic-average-load-container');
+
+    this.statusText = document.getElementById('graphic-status-text');
   }
 
-  async enableGraphicActiveBots() {
+  enableGraphics() {
     try {
-      const eventSource = new EventSource(`${localhost}/session/graphic/active-bots`);
+      this.createGraphicActiveBots();
+      this.createGraphicAverageLoad();
 
-      eventSource.onmessage = async (event) => {
+      this.graphicActiveBots.style.display = 'flex';
+      this.graphicAverageLoad.style.display = 'flex';
+
+      this.statusText.style.display = 'none';
+
+      this.eventSources.activeBots = new EventSource(`${localhost}/session/graphic/active-bots`);
+
+      this.eventSources.activeBots.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          if (data.message === 'SSE-соединение закрыто') {
+            resetEventSource(this.eventSources.activeBots); return;
+          }
+
           const activeBotsQuantity = data.activeBotsQuantity;
-          await this.addGraphicDataActiveBots(activeBotsQuantity);
+          this.addGraphicDataActiveBots(activeBotsQuantity);
         } catch (error) {
           log(`Ошибка парсинга SSE-сообщения (graphic-active-bots): ${error}`, 'log-error');
         }
       }
 
-      eventSource.onerror = async () => {
+      this.eventSources.activeBots.onerror = () => {
         log('Ошибка (graphic-active-bots): SSE-connection was dropped', 'log-error');
-        resetEventSource(eventSource);
+        resetEventSource(this.eventSources.activeBots);
+      }
+
+      this.eventSources.averageLoad = new EventSource(`${localhost}/session/graphic/average-load`);
+      
+      this.eventSources.averageLoad.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.message === 'SSE-соединение закрыто') {
+            resetEventSource(this.eventSources.averageLoad); return;
+          }
+
+          const averageLoad = data.averageLoad ? data.averageLoad : 0;
+          this.addGraphicDataAverageLoad(averageLoad);
+        } catch (error) {
+          log(`Ошибка парсинга SSE-сообщения (graphic-average-load): ${error}`, 'log-error');
+        }
+      }
+
+      this.eventSources.averageLoad.onerror = () => {
+        log('Ошибка (graphic-average-load): SSE-connection was dropped', 'log-error');
+        resetEventSource(this.eventSources.averageLoad);
       }
     } catch (error) {
       log(`Ошибка инициализации графика активных ботов: ${error}`, 'log-error');
     }
   }
 
-  async enableGraphicAverageLoad() {
-    try {
-      const eventSource = new EventSource(`${localhost}/session/graphic/average-load`);
-      
-      eventSource.onmessage = async (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          const averageLoad = data.averageLoad ? data.averageLoad : 0;
-          await this.addGraphicDataAverageLoad(averageLoad);
-        } catch (error) {
-          log(`Ошибка парсинга SSE-сообщения (graphic-average-load): ${error}`, 'log-error');
-        }
-      }
-
-      eventSource.onerror = async () => {
-        log('Ошибка (graphic-average-load): SSE-connection was dropped', 'log-error');
-        resetEventSource(eventSource);
-      }
-    } catch (error) {
-      log(`Ошибка инициализации графика средней нагрузки ботов: ${error}`, 'log-error');
+  disableGraphics() {
+    if (this.chartActiveBots) {
+      this.chartActiveBots.destroy();
+      this.chartActiveBots = null;
     }
+    
+    if (this.chartAverageLoad) {
+      this.chartAverageLoad.destroy();
+      this.chartAverageLoad = null;
+    }
+    
+    if (this.eventSources.activeBots) {
+      resetEventSource(this.eventSources.activeBots);
+      this.eventSources.activeBots = null;
+    }
+    
+    if (this.eventSources.averageLoad) {
+      resetEventSource(this.eventSources.averageLoad);
+      this.eventSources.averageLoad = null;
+    }
+
+    this.graphicActiveBots.style.display = 'none';
+    this.graphicAverageLoad.style.display = 'none';
+
+    this.statusText.innerText = 'Данные отсутствуют';
+    this.statusText.style.display = 'flex';
   }
   
-  async createGraphicActiveBots() {
+  createGraphicActiveBots() {
     const context = document.getElementById('graphic-active-bots').getContext('2d');
 
     if (!context) return;
@@ -548,7 +642,7 @@ class GraphicManager {
     });
   }
 
-  async createGraphicAverageLoad() {
+  createGraphicAverageLoad() {
     const context = document.getElementById('graphic-average-load').getContext('2d');
 
     if (!context) return;
@@ -630,7 +724,7 @@ class GraphicManager {
     });
   }
 
-  async addGraphicDataActiveBots(activeBotsQuantity) {
+  addGraphicDataActiveBots(activeBotsQuantity) {
     this.chartActiveBots.data.labels?.push(date());
     this.chartActiveBots.data.datasets[0].data.push(activeBotsQuantity);
 
@@ -642,7 +736,7 @@ class GraphicManager {
     this.chartActiveBots.update(); 
   }
 
-  async addGraphicDataAverageLoad(averageLoad) {
+  addGraphicDataAverageLoad(averageLoad) {
     this.chartAverageLoad.data.labels?.push(date());
     this.chartAverageLoad.data.datasets[0].data.push(averageLoad);
 
@@ -658,6 +752,11 @@ class GraphicManager {
 class MonitoringManager {
   statusText = null;
   botCardsContainer = null;
+
+  eventSources = {
+    profileDataMonitoring: null,
+    chatHistoryMonitoring: null
+  };
 
   maxChatHistoryLength = null;
   chatMessageCounter = {};
@@ -680,15 +779,13 @@ class MonitoringManager {
     this.botCardsContainer.style.display = 'grid';
   }
 
-  async clear() {
-    const cards = document.querySelectorAll('bot-card');
-
+  clear() {
     listenerManager.cleanup();
-
+    
+    this.botCardsContainer.innerHTML = '';
     this.chatMessageCounter = {};
     this.chatHistoryFilters = {};
-
-    cards.forEach(card => card.remove());
+    statistics.usernameList = [];
 
     this.statusText.innerText = 'Объекты ботов отсутствуют';
     this.statusText.style.color = '#646464f7';
@@ -758,17 +855,21 @@ class MonitoringManager {
     listenerManager.add(`send-message-${username}`, 'click', async () => await sendMsg());
   }
 
-  async enableProfileDataMonitoring() {
+  enableMonitoring() {
     try {
       const steveIconPath = document.getElementById('steve-img');
 
-      const eventSource = new EventSource(`${localhost}/session/monitoring/profile-data`);
+      this.eventSources.profileDataMonitoring = new EventSource(`${localhost}/session/monitoring/profile-data`);
 
-      const listener = async (event) => {
+      this.eventSources.profileDataMonitoring.onmessage = (event) => {
         try {
           if (!activity.botting) return;
 
           const data = JSON.parse(event.data);
+
+          if (data.message === 'SSE-соединение закрыто') {
+            resetEventSource(this.eventSources.profileDataMonitoring); return;
+          }
 
           const { 
             username, status, statusColor, 
@@ -876,14 +977,11 @@ class MonitoringManager {
         } catch (error) {
           log(`Ошибка парсинга SSE-сообщения (bots-monitoring): ${error}`, 'log-error');
         }
-      } 
+      }
 
-      eventSource.onmessage = async (event) => await listener(event);
-
-      eventSource.onerror = async () => {
+      this.eventSources.profileDataMonitoring.onerror = () => {
         log('Ошибка (bots-monitoring): SSE-connection was dropped', 'log-error');
-        eventSource.removeEventListener('message', listener);
-        eventSource.close();
+        resetEventSource(this.eventSources.profileDataMonitoring);
 
         this.botCardsContainer.innerHTML = '';
 
@@ -891,9 +989,83 @@ class MonitoringManager {
         this.statusText.style.color = '#e32020ff';
         this.statusText.style.display = 'flex';
       }
+
+      this.eventSources.chatHistoryMonitoring = new EventSource(`${localhost}/session/monitoring/chat-history`);
+
+      this.eventSources.chatHistoryMonitoring.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.message === 'SSE-соединение закрыто') {
+            resetEventSource(this.eventSources.chatHistoryMonitoring); return;
+          }
+
+          const username = data.username;
+          const type = data.type;
+          const text = data.text;
+
+          if (!this.chatHistoryFilters[username]) {
+            this.chatHistoryFilters[username] = 'all';
+          }
+
+          if (!this.filterMessage(this.chatHistoryFilters[username], String(text))) return;
+
+          const chat = document.getElementById(`monitoring-chat-content-${username}`);
+
+          if (!chat) return;
+
+          const container = document.createElement('div');
+
+          container.className = 'monitoring-line';
+          container.id = `monitoring-message-${username}`;
+
+          container.innerHTML = `
+            <div class="monitoring-line-time">${date()}</div>
+            <div class="monitoring-line-content"><span class="monitoring-type">(${type})</span> ${String(text).replace('%hb', '<span style="color: #56dd30ff; font-weight: 600;">').replace('%sc', '</span>')}</div>
+          `;
+
+          chat.appendChild(container);
+
+          if (!this.chatMessageCounter[username]) {
+            this.chatMessageCounter[username] = 1;
+          } else {
+            this.chatMessageCounter[username] = this.chatMessageCounter[username] + 1;
+
+            if (this.chatMessageCounter[username] > this.maxChatHistoryLength) {
+              this.chatMessageCounter[username] = this.chatMessageCounter[username] - 1;
+              chat.firstChild.remove();
+            }
+          }
+        } catch (error) {
+          log(`Ошибка парсинга SSE-сообщения (chat-monitoring): ${error}`, 'log-error');
+        }
+      }
+
+      this.eventSources.chatHistoryMonitoring.onerror = () => {
+        log('Ошибка (chat-monitoring): SSE-connection was dropped', 'log-error');
+        resetEventSource(this.eventSources.chatHistoryMonitoring);
+
+        this.chatMessageCounter = {};
+        this.chatHistoryFilters = {};
+
+        for (const username of statistics.usernameList) {
+          const chat = document.getElementById(`monitoring-chat-content-${username}`);
+
+          chat.innerHTML = '';
+          chat.style.display = 'none';
+          chat.remove();
+        }
+      }
     } catch (error) {
-      log(`Ошибка инициализации мониторинга ботов: ${error}`, 'log-error');
+      log(`Ошибка инициализации мониторинга: ${error}`, 'log-error');
     }
+  }
+
+  disableMonitoring() {
+    this.clear();
+
+    resetEventSource(this.eventSources.profileDataMonitoring);
+    resetEventSource(this.eventSources.chatHistoryMonitoring);
   }
 
   createTrigrams(word) {
@@ -983,79 +1155,11 @@ class MonitoringManager {
       
     return false;
   }
-
-  async enableChatHistoryMonitoring() {
-    try {
-      const eventSource = new EventSource(`${localhost}/session/monitoring/chat-history`);
-
-      eventSource.onmessage = async (event) => {
-        try {
-          const data = JSON.parse(event.data);
-
-          const username = data.username;
-          const type = data.type;
-          const text = data.text;
-
-          if (!this.chatHistoryFilters[username]) {
-            this.chatHistoryFilters[username] = 'all';
-          }
-
-          if (!this.filterMessage(this.chatHistoryFilters[username], String(text))) return;
-
-          const chat = document.getElementById(`monitoring-chat-content-${username}`);
-
-          if (!chat) return;
-
-          const container = document.createElement('div');
-
-          container.className = 'monitoring-line';
-          container.id = `monitoring-message-${username}`;
-
-          container.innerHTML = `
-            <div class="monitoring-line-time">${date()}</div>
-            <div class="monitoring-line-content"><span class="monitoring-type">(${type})</span> ${String(text).replace('%hb', '<span style="color: #56dd30ff; font-weight: 600;">').replace('%sc', '</span>')}</div>
-          `;
-
-          chat.appendChild(container);
-
-          if (!this.chatMessageCounter[username]) {
-            this.chatMessageCounter[username] = 1;
-          } else {
-            this.chatMessageCounter[username] = this.chatMessageCounter[username] + 1;
-
-            if (this.chatMessageCounter[username] > this.maxChatHistoryLength) {
-              this.chatMessageCounter[username] = this.chatMessageCounter[username] - 1;
-              chat.firstChild.remove();
-            }
-          }
-        } catch (error) {
-          log(`Ошибка парсинга SSE-сообщения (chat-monitoring): ${error}`, 'log-error');
-        }
-      }
-
-      eventSource.onerror = async () => {
-        log('Ошибка (chat-monitoring): SSE-connection was dropped', 'log-error');
-        eventSource.close();
-
-        this.chatMessageCounter = {};
-
-        for (const username of statistics.usernameList) {
-          const chat = document.getElementById(`monitoring-chat-content-${username}`);
-
-          chat.innerHTML = '';
-          chat.style.display = 'none';
-          chat.remove();
-        }
-      }
-    } catch (error) {
-      log(`Ошибка инициализации мониторинга чата: ${error}`, 'log-error');
-    }
-  }
 }
 
 class ProxyManager {
   proxyList = null;
-  proxyCount = { socks5: null, socks4: null, http: null, total: null };
+  proxyCount = { socks5: null, socks4: null, http: null, shadowsocks: null, total: null };
 
   proxyFinderStatus = null;
 
@@ -1067,6 +1171,7 @@ class ProxyManager {
     this.proxyCount.socks5 = document.getElementById('socks5-proxy-count');
     this.proxyCount.socks4 = document.getElementById('socks4-proxy-count');
     this.proxyCount.http = document.getElementById('http-proxy-count');
+    this.proxyCount.shadowsocks = document.getElementById('shadowsocks-proxy-count');
     this.proxyCount.total = document.getElementById('total-proxy-count');
 
     this.proxyList.addEventListener('input', () => this.updateCount());
@@ -1097,7 +1202,7 @@ class ProxyManager {
       } else if (splitPath[splitPath.length - 1] === 'json') {
         let isFirst = true;
 
-        const protocols = ['http', 'socks4', 'socks5'];
+        const protocols = ['http', 'socks4', 'socks5', 'ss'];
 
         for (const protocol of protocols) {
           if (JSON.parse(data)[protocol]) {
@@ -1128,17 +1233,20 @@ class ProxyManager {
     let socks5 = 0;
     let socks4 = 0;
     let http = 0;
+    let shadowsocks = 0;
 
     String(this.proxyList.value).split('\n').forEach(element => {
       if (element.startsWith('socks5://')) socks5++;
       if (element.startsWith('socks4://')) socks4++;
       if (element.startsWith('http://')) http++;
+      if (element.startsWith('ss://')) shadowsocks++;
     });
 
     this.proxyCount.socks5.innerText = socks5;
     this.proxyCount.socks4.innerText = socks4;
     this.proxyCount.http.innerText = http;
-    this.proxyCount.total.innerText = socks5 + socks4 + http;
+    this.proxyCount.shadowsocks.innerText = shadowsocks;
+    this.proxyCount.total.innerText = socks5 + socks4 + http + shadowsocks;
   }
   
   async collectProxy() {
@@ -1160,7 +1268,7 @@ class ProxyManager {
       if (proxies) {
         this.proxyFinderStatus.style.color = '#0cd212ff';
         this.proxyFinderStatus.innerText = 'Поиск окончен';
-        this.proxyList.value = Array.from(String(proxies).split('\n')).filter(e => e && e.trim() !== '').join('\n');
+        this.proxyList.value = Array.from(String(proxies).split('\n')).filter(p => p && p.trim() !== '').join('\n');
       } else {
         this.proxyFinderStatus.style.color = '#cc1d1dff';
         this.proxyFinderStatus.innerText = 'Ошибка поиска';
@@ -1530,16 +1638,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initSocialButtons();
 
     await functionManager.init();
-
     await proxyManager.init();
-
     await graphicManager.init();
-    await graphicManager.enableGraphicActiveBots();
-    await graphicManager.enableGraphicAverageLoad();
-
     await monitoringManager.init();
-    await monitoringManager.enableProfileDataMonitoring();
-    await monitoringManager.enableChatHistoryMonitoring();
     
     await initCheckboxes();
     await initSelects();

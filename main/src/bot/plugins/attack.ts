@@ -95,7 +95,7 @@ export class AttackPlugin {
       bot.setControlState(direction1, true);
       bot.setControlState(direction2, true);
 
-      await sleep(false, { min: 150, max: 300 });
+      await sleep(false, { min: 100, max: 180 });
 
       bot.setControlState(direction1, false);
       bot.setControlState(direction2, false);

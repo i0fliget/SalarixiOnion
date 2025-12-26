@@ -3,14 +3,14 @@ import net from 'net';
 
 async function connection(options: any) {
   return new Promise((resolve, reject) => {
-    if (options.type === 'socks5' || options.type === 'socks4') {
+    if (options.type === 'socks5' || options.type === 'ss' || options.type === 'socks4') {
       let data: any;
 
       if (options.username && options.password) {
         data = {
           host: options.host,
           port: options.port,
-          type: options.type === 'socks5' ? 5 : 4,
+          type: options.type === 'socks5' || options.type === 'ss' ? 5 : 4,
           userId: options.username,
           password: options.password
         };

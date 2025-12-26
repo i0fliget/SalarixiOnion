@@ -10,7 +10,7 @@ export class AntiFallPlugin {
       if (options.state === 'start') {
         const listener = () => {
           if (flow[username]?.profile?.tasks.antiFall.status) {
-            if (!bot.entity.onGround && bot.entity.velocity.y < -0.5) {
+            if (!bot.entity.onGround && bot.entity.velocity.y < options.fallVelocity ? options.fallVelocity : -0.5) {
               const blockBelow = this.findGroundBelow(bot);
               if (blockBelow) {
                 const fallHeight = bot.entity.position.y - blockBelow.position.y;
